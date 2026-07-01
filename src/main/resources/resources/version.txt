@@ -1,0 +1,3 @@
+# Modify source code depends on environment below:
+# gdal version : gdal_364_mapserver_801_release_msvc2017_x64
+# gdalwarp-bindings version: com.azavea.geotrellis.gdal-warp-bindings-3.6.4
