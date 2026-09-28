@@ -1,6 +1,8 @@
 # 三平台打包依赖完整性分析报告
 
 > 分析日期:2026-09-28 · 分支:deploy-alpha · 结论基于对 jar 内二进制的实际依赖分析(ELF NEEDED / PE 导入表),非清单比对。
+>
+> **状态更新(2026-09-28)**:补救已完成——三平台依赖闭包已补齐入库,deps.properties 已重写为脚本生成的拓扑序,并通过"闭包 + 清单同步 + 拓扑序 + 双向符号级 ABI"四重静态校验。详见 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)。待办:干净环境运行时冒烟验证(本机被终端安全软件拦截 DLL 加载,详见下文"运行时验证"节)。
 
 ## 总体结论
 
@@ -93,3 +95,13 @@ zlib.dll → sqlite3.dll → libcurl.dll(及其依赖)→ libcrypto-1_1-x64.dll 
 1. Linux:同容器内对每个库迭代 `ldd`(或 lddtree)确认除 glibc 基座外无缺项。
 2. Windows:用 Dependencies(lucasg)对拼好的目录跑传递闭包检查。
 3. 冒烟:在干净目标系统容器/虚机运行 `com.azavea.gdal.test.GDALWarpTest`。
+
+## 补救实施记录(2026-09-28)
+
+- **Linux 两架构**:经阿里云 centos-vault 镜像取 CentOS 7.9 官方 RPM(与构建环境同源),`bsdtar`(Windows 自带 libarchive)解包,各补 24 个库;闭包经 readelf 全量验证。
+- **Windows**:因 download.gisinternals.com 被网络封锁,改用 **OSGeo4W v2**(DLL 命名与 GIS Internals 完全一致,同为 MSVC 构建,ABI 兼容)按 gdal 3.6.4 同期版本补齐 27 个 DLL;pcre.dll 取自 conda-forge 8.45(VS2019 构建);pthreadVC2.dll 取自 sourceware 官方 pthreads-w32 2.9.1 x64;msvcr100.dll 取自微软官方 VC++ 2010 SP1 x64 redist。**geos_c.dll 替换为 OSGeo4W 3.11.2**(与补入的 geos.dll 配对)。
+- **加载顺序**:由依赖图 Kahn 拓扑排序生成(脚本),并通过断言校验"每个库的依赖均排在其前"。曾发现并修正:部分图生成的顺序遗漏了仓库原有库的依赖边(libproj→sqlite3/tiff/curl、amd64 libtiff/sqlite3→libz)导致错序,最终版使用全量图。
+- **ABI 校验**:对 Windows 全部 DLL 做了双向符号级校验(导入方所需符号 ⊆ 提供方导出表),零缺失。
+- **清理**:移除 bindings/bak/(4.9MB)、amd64 未声明的 libgeos.so/libgeos_c.so 副本、两平台 libpthread.so.0、无 mac 支持的 amd64 dylib;JAR 体积 72MB,无冗余资源。
+- **PROJ 数据路径**:未在 Java 侧显式设置 PROJ_LIB(原生 PROJ 无法读取 Java 系统属性);依赖 PROJ 7+ "共享库同目录回退"(libproj.so.25 / proj_9_1.dll 与 proj.db 同在解压目录)。若消费方进程环境已有 PROJ_LIB/PROJ_DATA,以环境变量优先——与包内 proj.db 同为 9.1 数据格式,无冲突。
+- **运行时验证(受阻)**:本机冒烟测试被终端安全软件(火绒 HipsDaemon/wsctrlsvc;Defender 实时保护为关闭状态)以 err=5 拦截,连 9 月 21 日曾成功加载的原版 DLL 也被拒,确认为整机策略而非包缺陷。待在干净 Windows 机器/VM 或 Linux 服务器上执行 `GDALWarpTest` 完成最终确认。
