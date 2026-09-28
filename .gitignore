@@ -6,6 +6,7 @@ target/
 ### Local / agent docs ###
 .docs/
 AGENTS.md
+.codegraph/
 
 ### IntelliJ IDEA ###
 .idea/
