@@ -52,7 +52,7 @@ OpenSSL 1.0.2 已 EOL,安全补丁需随包升级重发。
 | proj_9_2.dll | 9.2.1 | OSGeo4W proj92-runtime | MIT |
 | pcre.dll | 8.45 | conda-forge pcre(VS2019 构建) | BSD |
 | pthreadVC2.dll | 2.9.1 x64 | sourceware 官方 pthreads-w32 | LGPL-2.1(动态链接) |
-| msvcr100.dll | 10.00.40219.325 | 微软 VC++ 2010 SP1 x64 redist | 微软再分发条款 |
+| msvcr100.dll | 10.00.40219.1 | 微软官方 VC++ 2010 SP1 x64 redist(download.microsoft.com 的 vcredist_x64.exe,静态解包内嵌 vc_red.cab 获得) | 微软再分发条款 |
 
 ## 重要替换/共存说明
 
