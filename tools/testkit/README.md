@@ -6,6 +6,21 @@
 全部原生依赖按拓扑序解压加载成功、JNI 绑定可用、GDAL 核心完成初始化,
 并确认关键库由包内副本提供(不借用目标机系统库)。
 
+## 最小镜像自足性验证(minimal-test.sh)
+
+更进一步的最小化论证——镜像里**除 glibc 与 JVM 外一无所有**(curl/OpenSSL/
+NSS/Kerberos 等 GDAL 传递依赖全部缺席),跑通即证明不存在"借用系统库":
+
+```bash
+bash minimal-test.sh            # 本机架构:debian:bookworm-slim + 内置 JDK 完整流程
+bash minimal-test.sh --arm      # x86_64 VPS 上 qemu 模拟 arm64(需可拉 qemu-user-static)
+```
+
+| 用例 | 内容 | 意义 |
+|---|---|---|
+| debian-slim | ~75MB 基础镜像 + 包内置 JDK,容器内跑完整 run-test.sh | 主力:无 GDAL 相关系统库环境下的全流程验证 |
+| distroless | gcr.io/distroless/java:8(无 shell/包管理器,仅 glibc+JRE)直启 java | 金标准(可选);gcr.io 不可达时自动 SKIP |
+
 ## Docker 容器化测试(推荐)
 
 容器是**最干净的自足性证明**——环境里没有任何预装 GDAL/OpenSSL 库,跑通即证明不依赖宿主机。
