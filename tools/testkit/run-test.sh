@@ -36,13 +36,75 @@ elif awk "BEGIN{exit !($GLIBC_VER < 2.17)}"; then
     exit 2
 fi
 
-JAVACMD="${JAVA_HOME:+$JAVA_HOME/bin/}java"
-command -v "$JAVACMD" >/dev/null 2>&1 || JAVACMD=java
-if ! command -v "$JAVACMD" >/dev/null 2>&1; then
-    log "FAIL   : 找不到 java(需要 JDK/JRE 8+)"
+# ---------- Java 检测与按需供给 ----------
+# 原则:已有可用 java(8+)直接用;没有则下载"便携版"JDK 到 ~/.gdalwarp-test-jdk
+# 仅供本次测试使用,不做系统级安装,不触碰环境已有配置
+JDK_HOME="$HOME/.gdalwarp-test-jdk"
+JAVACMD=""
+JAVA_SRC=""
+
+java_major() { # 从 `java -version` 解析主版本("1.8.0_x" 与 "17.0.x" 两种格式)
+    "$1" -version 2>&1 | head -1 | grep -oE '"(1\.)?[0-9]+' | tr -d '"' | sed 's/^1\.//'
+}
+
+try_java() { # $1=候选 java;版本>=8 则采纳
+    [ -n "$1" ] || return 1
+    [ -x "$1" ] || command -v "$1" >/dev/null 2>&1 || return 1
+    local v; v="$(java_major "$1")"
+    if [ -n "$v" ] && [ "$v" -ge 8 ] 2>/dev/null; then JAVACMD="$1"; return 0; fi
+    return 1
+}
+
+# 1) 环境已有:JAVA_HOME 优先,其次 PATH
+for cand in "${JAVA_HOME:+$JAVA_HOME/bin/}java" java; do
+    if try_java "$cand"; then JAVA_SRC="system"; break; fi
+done
+
+# 2) 复用此前下载过的便携 JDK
+if [ -z "$JAVACMD" ]; then
+    for d in "$JDK_HOME"/*/; do
+        [ -d "${d}bin" ] || continue
+        if try_java "${d}bin/java"; then JAVA_SRC="portable-cached"; break; fi
+    done
+fi
+
+# 3) 现场下载便携 JDK8(不动系统)
+if [ -z "$JAVACMD" ]; then
+    log "INFO   : 未检测到可用 java(需 8+),下载便携版 JDK8 到 $JDK_HOME(不改动系统)"
+    mkdir -p "$JDK_HOME"
+    TARBALL="$JDK_HOME/jdk8-download.tar.gz"
+    if [ "$ARCH" = "x86_64" ]; then
+        # Oracle JDK 1.8.0_202(需 OTN 许可 Cookie,免登录)
+        URL="https://download.oracle.com/otn-pub/java/jdk/8u202-b08/1961070e4c9b4e26a04e7f5a083f551e/jdk-8u202-linux-x64.tar.gz"
+        curl -fL -H "Cookie: oraclelicense=accept-securebackup-cookie" \
+            --connect-timeout 15 -o "$TARBALL" "$URL" || rm -f "$TARBALL"
+    else
+        # Oracle 未发布过 linux-arm64 的 JDK8,采用等价 OpenJDK 8(Temurin)
+        curl -fL --connect-timeout 15 -o "$TARBALL" \
+            "https://api.adoptium.net/v3/binary/latest/8/ga/linux/aarch64/jdk/hotspot/normal/eclipse" \
+            || rm -f "$TARBALL"
+        if [ ! -s "$TARBALL" ]; then
+            # 备胎:清华 Adoptium 镜像(取目录内最新 aarch64 JDK8)
+            MURL="https://mirrors.tuna.tsinghua.edu.cn/Adoptium/8/jdk/aarch64/linux/"
+            F=$(curl -fs --connect-timeout 10 "$MURL" | grep -oE 'OpenJDK8U-jdk_aarch64_linux_hotspot_[^"]*\.tar\.gz' | sort -V | tail -1)
+            [ -n "$F" ] && curl -fL --connect-timeout 15 -o "$TARBALL" "${MURL}${F}" || rm -f "$TARBALL"
+        fi
+    fi
+    if [ -s "$TARBALL" ]; then
+        tar -xzf "$TARBALL" -C "$JDK_HOME" && rm -f "$TARBALL"
+        for d in "$JDK_HOME"/*/; do
+            if try_java "${d}bin/java"; then JAVA_SRC="portable-downloaded"; break; fi
+        done
+    fi
+fi
+
+if [ -z "$JAVACMD" ]; then
+    log "FAIL   : 无可用 java 且自动下载失败(离线或网络受限)"
+    log "        手动方案:解压任意 JDK8+ 后执行  JAVA_HOME=<jdk目录> bash run-test.sh"
     exit 2
 fi
 log "java   : $("$JAVACMD" -version 2>&1 | head -1)"
+log "source : $JAVA_SRC"
 
 # /tmp noexec 检测(解压目录默认在 java.io.tmpdir 下)
 if mount 2>/dev/null | grep -E ' on /tmp ' | grep -q noexec; then
