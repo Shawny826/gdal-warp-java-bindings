@@ -68,27 +68,27 @@ if [ -z "$JAVACMD" ]; then
     done
 fi
 
-# 3) 现场下载便携 JDK8(不动系统)
+# 3) 现场下载便携 OpenJDK 8(Temurin,免登录;双架构同源)
+#    注:Oracle JDK 归档(8u202-x64 / 8u271-aarch64 等)现已强制 SSO 登录,
+#    无法脚本直连;如需精确 Oracle 版本,请浏览器下载后放入 $JDK_HOME 或用 JAVA_HOME 指定
 if [ -z "$JAVACMD" ]; then
-    log "INFO   : 未检测到可用 java(需 8+),下载便携版 JDK8 到 $JDK_HOME(不改动系统)"
+    log "INFO   : 未检测到可用 java(需 8+),下载便携版 OpenJDK8 到 $JDK_HOME(不改动系统)"
     mkdir -p "$JDK_HOME"
     TARBALL="$JDK_HOME/jdk8-download.tar.gz"
     if [ "$ARCH" = "x86_64" ]; then
-        # Oracle JDK 1.8.0_202(需 OTN 许可 Cookie,免登录)
-        URL="https://download.oracle.com/otn-pub/java/jdk/8u202-b08/1961070e4c9b4e26a04e7f5a083f551e/jdk-8u202-linux-x64.tar.gz"
-        curl -fL -H "Cookie: oraclelicense=accept-securebackup-cookie" \
-            --connect-timeout 15 -o "$TARBALL" "$URL" || rm -f "$TARBALL"
+        MARCH="x64"; APIARCH="x64"
     else
-        # Oracle 未发布过 linux-arm64 的 JDK8,采用等价 OpenJDK 8(Temurin)
+        MARCH="aarch64"; APIARCH="aarch64"
+    fi
+    # 主源:清华 Adoptium 镜像(取目录内最新 JDK8)
+    MURL="https://mirrors.tuna.tsinghua.edu.cn/Adoptium/8/jdk/${MARCH}/linux/"
+    F=$(curl -fs --connect-timeout 10 "$MURL" | grep -oE "OpenJDK8U-jdk_${MARCH}_linux_hotspot_[^\"]*\.tar\.gz" | sort -Vu | tail -1)
+    [ -n "$F" ] && curl -fL --connect-timeout 15 -o "$TARBALL" "${MURL}${F}" || rm -f "$TARBALL"
+    # 备源:Adoptium API(GitHub release 直链)
+    if [ ! -s "$TARBALL" ]; then
         curl -fL --connect-timeout 15 -o "$TARBALL" \
-            "https://api.adoptium.net/v3/binary/latest/8/ga/linux/aarch64/jdk/hotspot/normal/eclipse" \
+            "https://api.adoptium.net/v3/binary/latest/8/ga/linux/${APIARCH}/jdk/hotspot/normal/eclipse" \
             || rm -f "$TARBALL"
-        if [ ! -s "$TARBALL" ]; then
-            # 备胎:清华 Adoptium 镜像(取目录内最新 aarch64 JDK8)
-            MURL="https://mirrors.tuna.tsinghua.edu.cn/Adoptium/8/jdk/aarch64/linux/"
-            F=$(curl -fs --connect-timeout 10 "$MURL" | grep -oE 'OpenJDK8U-jdk_aarch64_linux_hotspot_[^"]*\.tar\.gz' | sort -V | tail -1)
-            [ -n "$F" ] && curl -fL --connect-timeout 15 -o "$TARBALL" "${MURL}${F}" || rm -f "$TARBALL"
-        fi
     fi
     if [ -s "$TARBALL" ]; then
         tar -xzf "$TARBALL" -C "$JDK_HOME" && rm -f "$TARBALL"

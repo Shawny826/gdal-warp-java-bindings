@@ -42,11 +42,14 @@ test-report-*.log  lddebug-*.log
 
 要求:目标机 glibc ≥ 2.17(主流发行版均满足)。
 **Java 自动供给**:脚本优先使用环境已有 java(≥8,含 JAVA_HOME);若没有,
-自动下载**便携版 JDK8 到 `~/.gdalwarp-test-jdk`**(仅测试自用,不装系统、
-不改 JAVA_HOME/PATH、不覆盖任何已有 Java)——x86_64 取 Oracle JDK 1.8.0_202
-(官方 OTN 免登录链接),aarch64 取等价 OpenJDK 8(Temurin,Oracle 从未发布
-linux-arm64 的 JDK8;Adoptium 失败自动切清华镜像)。离线机器可自行解压任意
-JDK8+ 后 `JAVA_HOME=<jdk目录> bash run-test.sh`。
+自动下载**便携版 OpenJDK 8(Temurin)到 `~/.gdalwarp-test-jdk`**(仅测试自用,
+不装系统、不改 JAVA_HOME/PATH、不覆盖任何已有 Java)。下载源:清华 Adoptium
+镜像(主)+ Adoptium API(备),x64/aarch64 对称支持。
+**注意**:Oracle JDK 归档(如 8u202-x64、8u271-aarch64)现已强制 SSO 登录,
+无法脚本直连;如需精确 Oracle 版本,请从
+[Oracle 归档页](https://www.oracle.com/java/technologies/javase/javase8u211-later-archive-downloads.html)
+浏览器下载后解压到 `~/.gdalwarp-test-jdk/`,或执行时指定
+`JAVA_HOME=<jdk目录> bash run-test.sh`(脚本会自动识别复用)。
 `/tmp` 为 noexec 时脚本自动改用 `~/.gdalwarp-test-tmp`。
 
 ## 判定
