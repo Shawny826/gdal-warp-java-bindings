@@ -6,6 +6,26 @@
 全部原生依赖按拓扑序解压加载成功、JNI 绑定可用、GDAL 核心完成初始化,
 并确认关键库由包内副本提供(不借用目标机系统库)。
 
+## Docker 容器化测试(推荐)
+
+容器是**最干净的自足性证明**——环境里没有任何预装 GDAL/OpenSSL 库,跑通即证明不依赖宿主机。
+在任意装有 docker 的 VPS 上,解压测试包后:
+
+```bash
+bash docker-test.sh                 # 默认:temurin8 / ubuntu24+jdk17 / centos7+jdk8 / alpine(预期失败)
+DOCKER_PREFIX=docker.m.daocloud.io/ bash docker-test.sh   # 国内 VPS 拉镜像失败时
+ENABLE_QEMU=1 bash docker-test.sh   # x86_64 VPS 上附加 arm64 模拟用例
+```
+
+测试矩阵含义:
+| 用例 | 验证点 |
+|---|---|
+| temurin8 | Debian 系 + JDK8 基准 |
+| ubuntu24-jdk17 | 最新 glibc 2.39 + JDK17(与目标测试服务器同款) |
+| centos7-jdk8 | glibc 2.17 下限(与二进制同源环境) |
+| alpine-musl | musl 不支持,验证失败检测有效(预期 FAIL,记 PASS*) |
+| sim-arm64 | qemu 模拟另一架构(可选,建议真机复测) |
+
 ## 使用
 
 ```bash
