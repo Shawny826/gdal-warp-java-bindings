@@ -36,12 +36,16 @@ elif awk "BEGIN{exit !($GLIBC_VER < 2.17)}"; then
     exit 2
 fi
 
-# ---------- Java 检测与按需供给 ----------
-# 原则:已有可用 java(8+)直接用;没有则下载"便携版"JDK 到 ~/.gdalwarp-test-jdk
-# 仅供本次测试使用,不做系统级安装,不触碰环境已有配置
+# ---------- Java 解析:钉版 OpenJDK 8u292-b10(双架构统一) ----------
+# 优先级:操作员显式 JAVA_HOME > 包内置/缓存的 8u292-b10 > 系统 java > 在线下载钉版
+# JDK 均为便携解压使用,不做系统安装,不覆盖环境已有 Java
 JDK_HOME="$HOME/.gdalwarp-test-jdk"
 JAVACMD=""
 JAVA_SRC=""
+PIN_VER="jdk8u292-b10"
+if [ "$ARCH" = "x86_64" ]; then MARCH="x64"; else MARCH="aarch64"; fi
+PIN_URL="https://github.com/AdoptOpenJDK/openjdk8-binaries/releases/download/jdk8u292-b10/OpenJDK8U-jdk_${MARCH}_linux_hotspot_8u292b10.tar.gz"
+BUNDLE="$KIT/jdks/OpenJDK8U-jdk_${MARCH}_linux_hotspot_8u292b10.tar.gz"
 
 java_major() { # 从 `java -version` 解析主版本("1.8.0_x" 与 "17.0.x" 两种格式)
     "$1" -version 2>&1 | head -1 | grep -oE '"(1\.)?[0-9]+' | tr -d '"' | sed 's/^1\.//'
@@ -55,46 +59,42 @@ try_java() { # $1=候选 java;版本>=8 则采纳
     return 1
 }
 
-# 1) 环境已有:JAVA_HOME 优先,其次 PATH
-for cand in "${JAVA_HOME:+$JAVA_HOME/bin/}java" java; do
-    if try_java "$cand"; then JAVA_SRC="system"; break; fi
-done
+try_pin() { # 检查钉版缓存路径
+    if try_java "$JDK_HOME/$MARCH/$PIN_VER/bin/java"; then JAVA_SRC="pinned-8u292b10(cached)"; return 0; fi
+    return 1
+}
 
-# 2) 复用此前下载过的便携 JDK
-if [ -z "$JAVACMD" ]; then
-    for d in "$JDK_HOME"/*/; do
-        [ -d "${d}bin" ] || continue
-        if try_java "${d}bin/java"; then JAVA_SRC="portable-cached"; break; fi
-    done
+# 1) 操作员显式 JAVA_HOME(最高优先级,允许强制使用其他版本)
+if [ -n "${JAVA_HOME:-}" ] && try_java "$JAVA_HOME/bin/java"; then
+    JAVA_SRC="override(JAVA_HOME)"
 fi
 
-# 3) 现场下载便携 OpenJDK 8(Temurin,免登录;双架构同源)
-#    注:Oracle JDK 归档(8u202-x64 / 8u271-aarch64 等)现已强制 SSO 登录,
-#    无法脚本直连;如需精确 Oracle 版本,请浏览器下载后放入 $JDK_HOME 或用 JAVA_HOME 指定
+# 2) 包内置钉版 tarball(离线可用)或已解压缓存
 if [ -z "$JAVACMD" ]; then
-    log "INFO   : 未检测到可用 java(需 8+),下载便携版 OpenJDK8 到 $JDK_HOME(不改动系统)"
-    mkdir -p "$JDK_HOME"
-    TARBALL="$JDK_HOME/jdk8-download.tar.gz"
-    if [ "$ARCH" = "x86_64" ]; then
-        MARCH="x64"; APIARCH="x64"
+    try_pin || true
+    if [ -z "$JAVACMD" ] && [ -f "$BUNDLE" ]; then
+        log "INFO   : 使用包内置 JDK $PIN_VER($MARCH)解压至 $JDK_HOME/$MARCH"
+        mkdir -p "$JDK_HOME/$MARCH"
+        if tar -xzf "$BUNDLE" -C "$JDK_HOME/$MARCH" 2>>"$REPORT"; then
+            try_java "$JDK_HOME/$MARCH/$PIN_VER/bin/java" && JAVA_SRC="pinned-8u292b10(bundled)"
+        else
+            log "WARN   : 内置 JDK 解压失败,回退系统 java"
+        fi
+    fi
+fi
+
+# 3) 系统 java(无内置/缓存时)
+if [ -z "$JAVACMD" ] && try_java java; then JAVA_SRC="system"; fi
+
+# 4) 在线下载钉版(最后兜底)
+if [ -z "$JAVACMD" ]; then
+    log "INFO   : 无内置 JDK 且无系统 java,在线下载 $PIN_VER($MARCH)"
+    mkdir -p "$JDK_HOME/$MARCH"
+    if curl -fL --connect-timeout 15 -o "$JDK_HOME/pin-download.tar.gz" "$PIN_URL"; then
+        tar -xzf "$JDK_HOME/pin-download.tar.gz" -C "$JDK_HOME/$MARCH" && rm -f "$JDK_HOME/pin-download.tar.gz"
+        try_java "$JDK_HOME/$MARCH/$PIN_VER/bin/java" && JAVA_SRC="pinned-8u292b10(downloaded)"
     else
-        MARCH="aarch64"; APIARCH="aarch64"
-    fi
-    # 主源:清华 Adoptium 镜像(取目录内最新 JDK8)
-    MURL="https://mirrors.tuna.tsinghua.edu.cn/Adoptium/8/jdk/${MARCH}/linux/"
-    F=$(curl -fs --connect-timeout 10 "$MURL" | grep -oE "OpenJDK8U-jdk_${MARCH}_linux_hotspot_[^\"]*\.tar\.gz" | sort -Vu | tail -1)
-    [ -n "$F" ] && curl -fL --connect-timeout 15 -o "$TARBALL" "${MURL}${F}" || rm -f "$TARBALL"
-    # 备源:Adoptium API(GitHub release 直链)
-    if [ ! -s "$TARBALL" ]; then
-        curl -fL --connect-timeout 15 -o "$TARBALL" \
-            "https://api.adoptium.net/v3/binary/latest/8/ga/linux/${APIARCH}/jdk/hotspot/normal/eclipse" \
-            || rm -f "$TARBALL"
-    fi
-    if [ -s "$TARBALL" ]; then
-        tar -xzf "$TARBALL" -C "$JDK_HOME" && rm -f "$TARBALL"
-        for d in "$JDK_HOME"/*/; do
-            if try_java "${d}bin/java"; then JAVA_SRC="portable-downloaded"; break; fi
-        done
+        rm -f "$JDK_HOME/pin-download.tar.gz"
     fi
 fi
 
