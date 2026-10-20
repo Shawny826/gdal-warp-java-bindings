@@ -41,13 +41,13 @@ test-report-*.log  lddebug-*.log
 ```
 
 要求:目标机 glibc ≥ 2.17(主流发行版均满足)。
-**内置 Java(钉版,双架构统一)**:包内 `jdks/` 携带 **OpenJDK 8u292-b10**
-的 x64 与 aarch64 两个官方 tar 包,离线可用。解析优先级:
-`JAVA_HOME` 显式指定 > 包内置/缓存钉版(默认,**保证 amd/arm 同版**) >
-系统 java > 在线下载同一钉版(GitHub 直链兜底)。
-JDK 解压在 `~/.gdalwarp-test-jdk/<arch>/` 便携自用,不装系统、不改
-`JAVA_HOME`/`PATH`、不覆盖任何已有 Java。要换版本时,`JAVA_HOME=<jdk目录>
-bash run-test.sh` 即可强制指定。
+**Java 解析(机器已有优先)**:`JAVA_HOME` 显式指定 > **系统 java**
+(机器已有 JDK 环境(≥8)则直接使用,不动内置包)> **包内置钉版
+OpenJDK 8u292-b10**(包内 `jdks/` 携带 x64 与 aarch64 两个官方 tar 包,
+离线可用;首次解压缓存于 `~/.gdalwarp-test-jdk/<arch>/`,此后复用)>
+在线下载同一钉版(GitHub 直链兜底)。
+内置 JDK 便携解压自用,不装系统、不改 `JAVA_HOME`/`PATH`、不覆盖任何
+已有 Java。报告的 `source:` 行标明实际来源,便于核对两机版本。
 `/tmp` 为 noexec 时脚本自动改用 `~/.gdalwarp-test-tmp`。
 
 ## 判定

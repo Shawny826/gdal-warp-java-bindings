@@ -36,8 +36,9 @@ elif awk "BEGIN{exit !($GLIBC_VER < 2.17)}"; then
     exit 2
 fi
 
-# ---------- Java 解析:钉版 OpenJDK 8u292-b10(双架构统一) ----------
-# 优先级:操作员显式 JAVA_HOME > 包内置/缓存的 8u292-b10 > 系统 java > 在线下载钉版
+# ---------- Java 解析:机器已有优先,内置钉版 OpenJDK 8u292-b10 兜底 ----------
+# 优先级:操作员显式 JAVA_HOME > 系统 java(机器已有 JDK 环境则不使用包内内置)
+#         > 包内置/缓存的 8u292-b10 > 在线下载钉版
 # JDK 均为便携解压使用,不做系统安装,不覆盖环境已有 Java
 JDK_HOME="$HOME/.gdalwarp-test-jdk"
 JAVACMD=""
@@ -69,22 +70,22 @@ if [ -n "${JAVA_HOME:-}" ] && try_java "$JAVA_HOME/bin/java"; then
     JAVA_SRC="override(JAVA_HOME)"
 fi
 
-# 2) 包内置钉版 tarball(离线可用)或已解压缓存
+# 2) 系统 java(机器已有 JDK 环境则直接使用,不动内置包)
+if [ -z "$JAVACMD" ] && try_java java; then JAVA_SRC="system"; fi
+
+# 3) 包内置钉版 tarball(离线可用)或已解压缓存
 if [ -z "$JAVACMD" ]; then
     try_pin || true
     if [ -z "$JAVACMD" ] && [ -f "$BUNDLE" ]; then
-        log "INFO   : 使用包内置 JDK $PIN_VER($MARCH)解压至 $JDK_HOME/$MARCH"
+        log "INFO   : 机器无可用 java,使用包内置 JDK $PIN_VER($MARCH)解压至 $JDK_HOME/$MARCH"
         mkdir -p "$JDK_HOME/$MARCH"
         if tar -xzf "$BUNDLE" -C "$JDK_HOME/$MARCH" 2>>"$REPORT"; then
             try_java "$JDK_HOME/$MARCH/$PIN_VER/bin/java" && JAVA_SRC="pinned-8u292b10(bundled)"
         else
-            log "WARN   : 内置 JDK 解压失败,回退系统 java"
+            log "WARN   : 内置 JDK 解压失败,转在线下载"
         fi
     fi
 fi
-
-# 3) 系统 java(无内置/缓存时)
-if [ -z "$JAVACMD" ] && try_java java; then JAVA_SRC="system"; fi
 
 # 4) 在线下载钉版(最后兜底)
 if [ -z "$JAVACMD" ]; then
