@@ -104,4 +104,8 @@ zlib.dll → sqlite3.dll → libcurl.dll(及其依赖)→ libcrypto-1_1-x64.dll 
 - **ABI 校验**:对 Windows 全部 DLL 做了双向符号级校验(导入方所需符号 ⊆ 提供方导出表),零缺失。
 - **清理**:移除 bindings/bak/(4.9MB)、amd64 未声明的 libgeos.so/libgeos_c.so 副本、两平台 libpthread.so.0、无 mac 支持的 amd64 dylib;JAR 体积 72MB,无冗余资源。
 - **PROJ 数据路径**:未在 Java 侧显式设置 PROJ_LIB(原生 PROJ 无法读取 Java 系统属性);依赖 PROJ 7+ "共享库同目录回退"(libproj.so.25 / proj_9_1.dll 与 proj.db 同在解压目录)。若消费方进程环境已有 PROJ_LIB/PROJ_DATA,以环境变量优先——与包内 proj.db 同为 9.1 数据格式,无冲突。
-- **运行时验证(受阻)**:本机冒烟测试被终端安全软件(火绒 HipsDaemon/wsctrlsvc;Defender 实时保护为关闭状态)以 err=5 拦截,连 9 月 21 日曾成功加载的原版 DLL 也被拒,确认为整机策略而非包缺陷。待在干净 Windows 机器/VM 或 Linux 服务器上执行 `GDALWarpTest` 完成最终确认。
+- **运行时验证(2026-10-21 已完成 Linux 侧)**:在百度云 VPS(Ubuntu 24.04 x86_64,Docker 29)执行容器化测试,结果:
+  - 最小镜像 `debian:bookworm-slim`(glibc 2.36,无任何 GDAL 相关系统库)+ 内置 JDK 8u292-b10:**amd64 与 arm64(qemu 模拟)均 PASS**,GDAL 3.6.4 核心完成初始化,LD_DEBUG 审计 15/15 关键库全部由包内解压目录提供、0 个借用系统库;
+  - 环境矩阵:temurin8 / ubuntu24+JDK17(glibc 2.39)/ centos7+JDK8(glibc 2.17 下限)全部 PASS,alpine-musl 按预期失败(反向验证失败检测有效);
+  - 结论:**Linux 两架构依赖闭包运行时自足性已实证**。遗留:arm64 实体机终验(可选,qemu 已通过)、Windows 干净机冒烟(本机被终端安全软件拦截 DLL 加载,属整机策略)。
+  - 测试产物与日志位于 VPS `/root/gdal-warp-testkit/`;期间修复了 VPS docker daemon 残留的死代理配置(172.19.0.1:7890,已备份为 http-proxy.conf.bak)。
