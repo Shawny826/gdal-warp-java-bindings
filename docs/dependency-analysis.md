@@ -107,5 +107,6 @@ zlib.dll → sqlite3.dll → libcurl.dll(及其依赖)→ libcrypto-1_1-x64.dll 
 - **运行时验证(2026-10-21 已完成 Linux 侧)**:在百度云 VPS(Ubuntu 24.04 x86_64,Docker 29)执行容器化测试,结果:
   - 最小镜像 `debian:bookworm-slim`(glibc 2.36,无任何 GDAL 相关系统库)+ 内置 JDK 8u292-b10:**amd64 与 arm64(qemu 模拟)均 PASS**,GDAL 3.6.4 核心完成初始化,LD_DEBUG 审计 15/15 关键库全部由包内解压目录提供、0 个借用系统库;
   - 环境矩阵:temurin8 / ubuntu24+JDK17(glibc 2.39)/ centos7+JDK8(glibc 2.17 下限)全部 PASS,alpine-musl 按预期失败(反向验证失败检测有效);
+  - 信创代际(2026-10-21 追加):银河麒麟 V10 无官方公开 docker 镜像,以同代际同工具链的 openEuler 20.03(glibc 2.28)代理验证——x86_64(海光/兆芯场景)与 aarch64/qemu(鲲鹏/飞腾场景)均 PASS,15/15 关键库由包内提供;如有真机麒麟 V10,以裸机 `run-test.sh` 为最终结论;
   - 结论:**Linux 两架构依赖闭包运行时自足性已实证**。遗留:arm64 实体机终验(可选,qemu 已通过)、Windows 干净机冒烟(本机被终端安全软件拦截 DLL 加载,属整机策略)。
   - 测试产物与日志位于 VPS `/root/gdal-warp-testkit/`;期间修复了 VPS docker daemon 残留的死代理配置(172.19.0.1:7890,已备份为 http-proxy.conf.bak)。
