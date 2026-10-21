@@ -1,22 +1,27 @@
 #!/usr/bin/env bash
 # deploy-alpha 容器化测试矩阵(Linux amd64/arm64 通用)
 # 用法: 在装有 docker 的机器上,进入解压后的 gdal-warp-testkit 目录执行:
-#        bash docker-test.sh
+#        bash docker-test.sh              # 全部用例
+#        bash docker-test.sh kylin        # 只跑名称含 kylin 的用例
 # 环境变量(可选):
 #   DOCKER_PREFIX  镜像仓库前缀(直连 docker hub 不通时用国内镜像,
-#                  例: DOCKER_PREFIX=docker.m.daocloud.io/)
+#                  例: DOCKER_PREFIX=docker.m.daocloud.io/ 或 docker.1ms.run/)
 #   ENABLE_QEMU=1  在 x86_64 VPS 上附加 arm64 模拟用例(需先能拉 multiarch/qemu-user-static)
 
 set -u
 KIT="$(cd "$(dirname "$0")" && pwd)"
 P="${DOCKER_PREFIX:-}"
+CF="${1:-}"   # 用例名子串过滤,空为全部
 RESULTS=""
 
 record() { RESULTS="${RESULTS}${1}|${2}|${3}
 "; printf '%-24s %-6s %s\n' "$1" "$2" "$3"; }
 
+want_case() { [ -z "$CF" ] || [[ "$1" == *"$CF"* ]]; }
+
 run_container() { # name image prelude
     local name="$1" image="$2" prelude="${3:-}"
+    want_case "$name" || return 0
     echo "================================================================"
     echo ">> $name  (image: $image)"
     if ! docker image inspect "$image" >/dev/null 2>&1 \
@@ -48,7 +53,13 @@ run_container ubuntu24-jdk17 "${P}ubuntu:24.04" \
 run_container centos7-jdk8 "${P}centos:7" \
     "sed -i -e 's|^mirrorlist=|#mirrorlist=|' -e 's|^#baseurl=http://mirror.centos.org|baseurl=http://vault.centos.org|' /etc/yum.repos.d/*.repo && yum install -y -q java-1.8.0-openjdk-headless wget >/dev/null 2>&1 || (sed -i 's|vault.centos.org|mirrors.aliyun.com/centos-vault|' /etc/yum.repos.d/*.repo && yum install -y -q java-1.8.0-openjdk-headless >/dev/null 2>&1)"
 
-# 4) 反向验证:Alpine(musl)应明确失败,证明脚本的失败检测有效
+# 4) 信创代际:银河麒麟 V10(官方无公开镜像,用同代际同工具链的
+#    openEuler 20.03(glibc 2.28)代理验证;内置 JDK,容器内零网络)
+run_container kylin-v10-oe2003 "${P}openeuler/openeuler:20.03-lts-sp4" \
+    'ARCH=$(uname -m); [ "$ARCH" = "x86_64" ] && M=x64 || M=aarch64; mkdir -p /opt/jdk && tar -xzf /kit/jdks/OpenJDK8U-jdk_${M}_linux_hotspot_8u292b10.tar.gz -C /opt/jdk --strip-components=1 && export JAVA_HOME=/opt/jdk'
+
+# 5) 反向验证:Alpine(musl)应明确失败,证明脚本的失败检测有效
+if want_case alpine; then
 echo "================================================================"
 echo ">> alpine-musl(预期失败:glibc 二进制不支持 musl)"
 docker run --rm -v "$KIT:/kit" "${P}alpine:3.19" sh -c \
@@ -59,9 +70,10 @@ if [ $? -eq 0 ]; then
 else
     record alpine-musl "PASS*" "按预期失败,失败检测有效"
 fi
+fi
 
-# 5) 可选:qemu 跨架构模拟(x86_64 VPS 上模拟 arm64)
-if [ "${ENABLE_QEMU:-0}" = "1" ]; then
+# 6) 可选:qemu 跨架构模拟(x86_64 VPS 上模拟 arm64)
+if [ "${ENABLE_QEMU:-0}" = "1" ] && { [ -z "$CF" ] || [[ "sim-arm64" == *"$CF"* ]]; }; then
     docker run --privileged --rm "${P}multiarch/qemu-user-static" --reset -p yes >/dev/null 2>&1 || true
     if [ "$(uname -m)" = "x86_64" ]; then
         echo "================================================================"

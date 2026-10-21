@@ -39,6 +39,7 @@ ENABLE_QEMU=1 bash docker-test.sh   # x86_64 VPS 上附加 arm64 模拟用例
 | ubuntu24-jdk17 | 最新 glibc 2.39 + JDK17(与目标测试服务器同款) |
 | centos7-jdk8 | glibc 2.17 下限(与二进制同源环境) |
 | alpine-musl | musl 不支持,验证失败检测有效(预期 FAIL,记 PASS*) |
+| kylin-v10-oe2003 | 银河麒麟 V10 信创代际(官方无公开镜像,以 openEuler 20.03/glibc 2.28 代理;内置 JDK) |
 | sim-arm64 | qemu 模拟另一架构(可选,建议真机复测) |
 
 ## 使用
